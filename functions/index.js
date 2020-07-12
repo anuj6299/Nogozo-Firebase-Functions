@@ -7,10 +7,12 @@ exports.onOrderCreate = functions.database.ref('/orders/{orderid}')
 	const orderid = context.params.orderid;
 	const customerid = snap.child('customerid').val();
 	const shopid = snap.child('shopid').val();
+	const shopname = snap.child('shopname').val();
 
 	admin.database().ref(`/users/customer/${customerid}/orders/${orderid}`).set('current');
 	admin.database().ref(`/users/shop/${shopid}/orders/${orderid}`).set('current');
-	sendNotification(shopid, "New Order", "New Order arrived!!");
+	sendNotification(shopid, "New Order", "New Order arrived.");
+	sendNotification(customerid, "Order Booked", "Your order from " + shopname + " is booked");
 });
 
 exports.onOrderStatusChange = functions.database.ref('/orders/{orderid}')
@@ -40,6 +42,40 @@ function orderComplete(orderId, customerId, shopId){
 	admin.database().ref(`/users/customer/${customerId}/orders/${orderId}`).set('history');
 	admin.database().ref(`/users/shop/${shopId}/orders/${orderId}`).set('history');
 }
+
+exports.registerShopInServiceArea = functions.https.onRequest((req, res) => {
+	/*expected data
+		serviceids = ["id1","id2", ...]
+		areaids = ["id1", "id2", ....]
+		shopId = string
+		shopname = string
+	*/
+	var serviceids = req.body.data.serviceids;
+	var areaids = req.body.data.areaids;
+	var shopid = req.body.data.shopid;
+	var shopname = req.body.data.shopname;
+
+	var scheme = {};
+	/*
+	DATA SCHEME
+	shop 
+		serviceid
+			areaid
+				shopId = shopname
+
+	*/
+
+	//DO NOT USE HASHMAP USE PATH AS KEY
+	for(let serviceid of serviceids){
+		var areaScheme = {};
+		for(let areaid of areaids){
+			areaScheme[areaid] = {shopid: shopname};
+		}
+		scheme[serviceid] = areaScheme;
+	}
+	if(Object.keys(scheme).length != 0)
+		admin.database().ref(`shops`).update(scheme);
+});
 
 function sendNotification(userid, titleString, messageString){
 
