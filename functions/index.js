@@ -43,40 +43,6 @@ function orderComplete(orderId, customerId, shopId){
 	admin.database().ref(`/users/shop/${shopId}/orders/${orderId}`).set('history');
 }
 
-exports.registerShopInServiceArea = functions.https.onRequest((req, res) => {
-	/*expected data
-		serviceids = ["id1","id2", ...]
-		areaids = ["id1", "id2", ....]
-		shopId = string
-		shopname = string
-	*/
-	var serviceids = req.body.data.serviceids;
-	var areaids = req.body.data.areaids;
-	var shopid = req.body.data.shopid;
-	var shopname = req.body.data.shopname;
-
-	var scheme = {};
-	/*
-	DATA SCHEME
-	shop 
-		serviceid
-			areaid
-				shopId = shopname
-
-	*/
-
-	//DO NOT USE HASHMAP USE PATH AS KEY
-	for(let serviceid of serviceids){
-		var areaScheme = {};
-		for(let areaid of areaids){
-			areaScheme[areaid] = {shopid: shopname};
-		}
-		scheme[serviceid] = areaScheme;
-	}
-	if(Object.keys(scheme).length != 0)
-		admin.database().ref(`shops`).update(scheme);
-});
-
 function sendNotification(userid, titleString, messageString){
 
 	const getTokenPromise = admin.database().ref(`/token/${userid}`).once('value');
@@ -95,3 +61,87 @@ function sendNotification(userid, titleString, messageString){
 		}
 	});
 }
+
+exports.search = functions.https.onRequest((req, res) => {
+	var db = admin.database();
+	/*
+	 * query, type=stirng, query-string 
+	 * cityid, type=string, cityid of searched area;
+	 */
+	var query = req.body.data.query;
+	const cityId = req.body.data.cityid;
+
+	//var query = req.query.query;
+	//const cityId = req.query.cityid;
+
+	if(cityId == undefined){
+		res.send({"data":{"error":"Provide cityid"}});
+		return {"error":"Provide cityid"};
+	}
+	if(query == undefined || query.length == 0){
+		res.send({"data":{"error":"Provide query"}});
+		return {"data":{"error":"Provide query"}};
+	}
+	if(query == undefined || query.length < 4){
+		res.send({"data":{"error":"Provide query of Length 4"}});
+		return {"data":{"error":"Provide query of Length 4"}};
+	}
+
+	var shops = {};
+	var counter = 0;
+	query = query.toLowerCase();
+
+	// db.ref('shops').child(cityId).once('value', function(snap){
+	// 	const length = snap.numChildren();
+	// 	snap.forEach(function(shop){
+	// 		db.ref('items').child(shop.key).orderByChild('itemname').startAt(query).endAt(query+"\uf8ff").once('value', function(itemSnap){
+	// 			if(itemSnap.numChildren() > 0){
+	// 				shops[itemSnap.key] = shop.child("shopname").val();
+	// 			}
+	// 			counter++;
+	// 			if(counter == length){
+	// 				console.log({"data":shops});
+	// 				res.status(200).send({"data":shops});
+	// 				return {"data":shops};
+	// 			}
+	// 		});
+	// 	});
+	// });
+
+	db.ref('shops').child(cityId).once('value', function(snap){
+		const length = snap.numChildren();
+		if(!snap.exists()){
+			res.status(200).send({});
+			return {};
+		}else{
+
+		}
+		snap.forEach(function(shop){
+			db.ref('items').child(shop.key).once('value', function(itemSnap){
+				const data = itemSnap.toJSON();
+				for(var item in data){
+					if(data[item].itemname.toString().toLowerCase().includes(query)){
+						shops[shop.key] = shop.child('shopname').val();
+						break;
+					}
+				}
+				counter++;
+				if(counter == length){
+					res.status(200).send({"data":shops});
+					return {"data":shops};
+				}
+
+				// if(itemSnap.numChildren() > 0){
+				// 	shops[itemSnap.key] = shop.child("shopname").val();
+				// }
+				// counter++;
+				// if(counter == length){
+				// 	console.log({"data":shops});
+				// 	res.status(200).send({"data":shops});
+				// 	return {"data":shops};
+				// }
+			});
+		});
+	});
+
+});
